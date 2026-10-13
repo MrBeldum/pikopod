@@ -73,10 +73,11 @@ func TestDoctorSandboxPortTakenByNonPikopod(t *testing.T) {
 	}
 }
 
-func TestDoctorSandboxPortAcceptsHealthz(t *testing.T) {
+func TestDoctorSandboxPortAcceptsPikopod(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
-			w.WriteHeader(http.StatusOK)
+		if r.URL.Path == "/_pikopod/v1/sandboxes" {
+			w.Header().Set("x-pikopod-api", "v1")
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		http.NotFound(w, r)
@@ -100,6 +101,40 @@ func TestDoctorSandboxPortAcceptsHealthz(t *testing.T) {
 	}
 	out, err := runCLI(t, newDoctorCmd())
 	if !strings.Contains(out, "✓ sandbox port free or sandbox already running") {
-		t.Fatalf("healthz on sandbox port should pass check (err=%v):\n%s", err, out)
+		t.Fatalf("pikopod header on sandbox port should pass check (err=%v):\n%s", err, out)
+	}
+}
+
+func TestDoctorSandboxPortRejectsPlainHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello from some other server"))
+	}))
+	defer srv.Close()
+	u := srv.Listener.Addr().String()
+	_, portStr, err := net.SplitHostPort(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	yaml := fmt.Sprintf("listen: 127.0.0.1\nsandbox_port: %d\ndata_dir: %s\nupstreams:\n  widgets:\n    target: https://api.example.invalid\n", port, filepath.Join(dir, "data"))
+	if err := os.WriteFile("pikopod.yaml", []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCLI(t, newDoctorCmd())
+	if err == nil {
+		t.Fatalf("doctor must fail when sandbox port serves plain HTTP:\n%s", out)
+	}
+	if !strings.Contains(out, "sandbox port free or sandbox already running") {
+		t.Fatalf("missing sandbox check line:\n%s", out)
+	}
+	if !strings.Contains(out, "not pikopod") {
+		t.Fatalf("expected foreign-port error:\n%s", out)
 	}
 }

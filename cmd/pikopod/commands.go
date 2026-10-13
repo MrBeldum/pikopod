@@ -474,10 +474,19 @@ func newDoctorCmd() *cobra.Command {
 				conn, dErr := net.DialTimeout("tcp", sbxAddr, 300*time.Millisecond)
 				if dErr == nil {
 					conn.Close()
-					resp, hErr := cfg.LocalClient(2 * time.Second).Get(cfg.Scheme() + "://" + sbxAddr + "/healthz")
+					req, rErr := http.NewRequest(http.MethodGet, cfg.Scheme()+"://"+sbxAddr+"/_pikopod/v1/sandboxes", nil)
+					if rErr != nil {
+						return rErr
+					}
+					if token := cfg.Token(); token != "" {
+						req.Header.Set("X-Pikopod-Token", token)
+					}
+					resp, hErr := cfg.LocalClient(2 * time.Second).Do(req)
 					if hErr == nil {
 						resp.Body.Close()
-						return nil
+						if resp.Header.Get("x-pikopod-api") == "v1" {
+							return nil
+						}
 					}
 					return fmt.Errorf("port %s is taken by something that is not pikopod", sbxAddr)
 				}
