@@ -88,7 +88,7 @@ func newInitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
 			if _, err := os.Stat("pikopod.yaml"); err == nil && !force {
-				return errfmt.New("pikopod.yaml already exists", "refusing to overwrite your configuration", "edit it directly, or remove it first to re-scaffold", "docs/config-reference.md")
+				return errfmt.New("pikopod.yaml already exists", "refusing to overwrite your configuration", "edit it directly, or re-run with `--force` to overwrite it", "docs/config-reference.md")
 			}
 			if err := os.WriteFile("pikopod.yaml", []byte(initTemplate), 0o600); err != nil {
 				return errfmt.Newf("cannot write pikopod.yaml", "check directory permissions", "docs/config-reference.md", "%v", err)
